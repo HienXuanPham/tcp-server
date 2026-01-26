@@ -1,67 +1,81 @@
 package main
 
 import (
-	"net"
-	"log"
-	"time"
+	"errors"
 	"io"
+	"log"
+	"net"
+	"time"
+)
+
+const (
+	addr         = "127.0.0.1:8080"
+	readTimeout  = 30 * time.Second
+	writeTimeout = 30 * time.Second
 )
 
 func main() {
-	listener, lerr := net.Listen("tcp", ":8080")
-	if lerr != nil {
-		log.Fatal("Error listening:", lerr)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("listen %s: %v", addr, err)
 	}
 	defer listener.Close()
 
-	conn, aerr := listener.Accept()
-	if aerr != nil {
-		log.Fatal("Error accepting conn:", aerr)
-	}
+	log.Printf("listening on %s", addr)
 
-	log.Println("Accepted connection")
-	log.Println(conn.RemoteAddr().String())
-	log.Println(conn.LocalAddr().String())
-		
+	conn, err := listener.Accept()
+	if err != nil {
+		log.Fatalf("accept failed: %v", err)
+	}
 	defer conn.Close()
 
-	const readTimeout = 30 * time.Second
-	const writeTimeout = 30 * time.Second
-	buf := make([]byte, 1024)
+	log.Printf("accepted remote=%s local=%s", conn.RemoteAddr(), conn.LocalAddr())
+
+	if err := handleConn(conn); err != nil {
+		log.Printf("connection ended: %v", err)
+	}
+}
+
+func handleConn(conn net.Conn) error {
+	buf := make([]byte, 4096)
 
 	for {
-		rterr := conn.SetReadDeadline(time.Now().Add(readTimeout))
-		if rterr != nil {
-			log.Println("SetReadDeadline failed", rterr)
-			break
+		if err := conn.SetDeadline(time.Now().Add(readTimeout)); err != nil {
+			return err
 		}
 
-		n, rerr := conn.Read(buf)
-
-		if rerr != nil {
-			if rerr == io.EOF {
-				log.Println("EOF")
-				break
-			} else {
-				log.Println("Read error:", rerr)
+		n, err := conn.Read(buf)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return io.EOF
 			}
-			break
+
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				return ne
+			}
+			return err
 		}
 
-		data := buf[:n]
-
-		wterr := conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-		if wterr != nil {
-			log.Println("SetWriteDeadline failed", wterr)
-			break
+		if err := conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+			return err
 		}
 
-		_, werr := conn.Write(data)
-
-		if werr != nil {
-			log.Println("Write failed", werr)
-			break
+		if err := writeAll(conn, buf[:n]); err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				return ne
+			}
+			return err
 		}
-
 	}
+}
+
+func writeAll(w io.Writer, p []byte) error {
+	for len(p) > 0 {
+		n, err := w.Write(p)
+		if err != nil {
+			return err
+		}
+		p = p[:n]
+	}
+	return nil
 }
