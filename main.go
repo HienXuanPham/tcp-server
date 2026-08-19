@@ -75,7 +75,7 @@ func writeAll(w io.Writer, p []byte) error {
 		if err != nil {
 			return err
 		}
-		p = p[:n]
+		p = p[n:]
 	}
 	return nil
 }
