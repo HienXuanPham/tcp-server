@@ -40,7 +40,7 @@ func handleConn(conn net.Conn) error {
 	buf := make([]byte, 4096)
 
 	for {
-		if err := conn.SetDeadline(time.Now().Add(readTimeout)); err != nil {
+		if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
 			return err
 		}
 
