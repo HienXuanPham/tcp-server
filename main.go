@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -23,20 +24,32 @@ func main() {
 
 	log.Printf("listening on %s", addr)
 
-	conn, err := listener.Accept()
+	if err := serve(listener); err != nil {
+		log.Printf("server ended: %v", err)
+	}
+}
+
+func serve(ln net.Listener) error {
+	conn, err := ln.Accept()
 	if err != nil {
-		log.Fatalf("accept failed: %v", err)
+		return fmt.Errorf("accept failed: %w", err)
 	}
 	defer conn.Close()
 
 	log.Printf("accepted remote=%s local=%s", conn.RemoteAddr(), conn.LocalAddr())
 
-	if err := handleConn(conn); err != nil {
-		log.Printf("connection ended: %v", err)
+	if err := handleConn(conn, readTimeout, writeTimeout); err != nil {
+		return fmt.Errorf("handle connection: %w", err)
 	}
+
+	return nil
 }
 
-func handleConn(conn net.Conn) error {
+func handleConn(
+	conn net.Conn,
+	readTimeout time.Duration,
+	writeTimeout time.Duration,
+) error {
 	buf := make([]byte, 4096)
 
 	for {
@@ -47,7 +60,7 @@ func handleConn(conn net.Conn) error {
 		n, err := conn.Read(buf)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return io.EOF
+				return nil
 			}
 
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
