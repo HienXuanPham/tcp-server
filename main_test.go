@@ -62,3 +62,26 @@ func TestServerAcceptsClientAndEchoesBytes(t *testing.T) {
 		t.Errorf("received %q bytes, want %q bytes", got, want)
 	}
 }
+
+func TestServerEchoesDataLargerThanReadBuffer(t *testing.T) {
+	conn := setupTestConnection(t)
+	want := bytes.Repeat([]byte("A"), 4097)
+
+	n, err := io.Copy(conn, bytes.NewReader(want))
+	if err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+	if n != int64(len(want)) {
+		t.Fatalf("wrote %d bytes, want %d bytes", n, len(want))
+	}
+
+	got := make([]byte, len(want))
+
+	if _, err := io.ReadFull(conn, got); err != nil {
+		t.Fatalf("read echo failed: %v", err)
+	}
+
+	if !bytes.Equal(got, want) {
+		t.Errorf("echoed data does not match sent data")
+	}
+}
