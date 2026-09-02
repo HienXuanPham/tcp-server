@@ -7,7 +7,9 @@ import (
 	"testing"
 )
 
-func TestServerAcceptsClientAndEchoesBytes(t *testing.T) {
+func setupTestConnection(t *testing.T) net.Conn {
+	t.Helper()
+
 	// create a server using net.Listen
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -29,10 +31,18 @@ func TestServerAcceptsClientAndEchoesBytes(t *testing.T) {
 		conn.Close()
 	})
 
-	// client write bytes through conn
+	return conn
+}
+
+func TestServerAcceptsClientAndEchoesBytes(t *testing.T) {
+	// arrange
+	conn := setupTestConnection(t)
 	want := []byte("One Piece")
 
+	// act
 	n, err := conn.Write(want)
+
+	// check writing errors
 	if err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
@@ -41,9 +51,13 @@ func TestServerAcceptsClientAndEchoesBytes(t *testing.T) {
 	}
 
 	got := make([]byte, len(want))
+
+	// check reading errors
 	if _, err := io.ReadFull(conn, got); err != nil {
 		t.Fatalf("read echo failed: %v", err)
 	}
+
+	// assert
 	if !bytes.Equal(got, want) {
 		t.Errorf("received %q bytes, want %q bytes", got, want)
 	}
