@@ -85,3 +85,33 @@ func TestServerEchoesDataLargerThanReadBuffer(t *testing.T) {
 		t.Errorf("echoed data does not match sent data")
 	}
 }
+
+func TestServerKeepsConnectionOpen(t *testing.T) {
+	conn := setupTestConnection(t)
+	messages := [][]byte{
+		[]byte("One Piece"),
+		[]byte("Luffy"),
+		[]byte("Nami"),
+	}
+
+	for i, want := range messages {
+		n, err := conn.Write(want)
+
+		if err != nil {
+			t.Fatalf("message %d: write failed: %v", i, err)
+		}
+		if n != len(want) {
+			t.Fatalf("message %d: wrote %d bytes, want %d bytes", i, n, len(want))
+		}
+
+		got := make([]byte, len(want))
+
+		if _, err := io.ReadFull(conn, got); err != nil {
+			t.Fatalf("message %d: read echo failed: %v", i, err)
+		}
+
+		if !bytes.Equal(got, want) {
+			t.Errorf("message %d: received %q, want %q", i, got, want)
+		}
+	}
+}
