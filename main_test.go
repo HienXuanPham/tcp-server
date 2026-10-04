@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net"
 	"testing"
+	"time"
 )
 
 func setupTestConnection(t *testing.T) net.Conn {
@@ -113,5 +115,19 @@ func TestServerKeepsConnectionOpen(t *testing.T) {
 		if !bytes.Equal(got, want) {
 			t.Errorf("message %d: received %q, want %q", i, got, want)
 		}
+	}
+}
+
+func TestServerClosesInactiveConnection(t *testing.T) {
+	conn := setupTestConnection(t)
+	message := []byte("One Piece")
+	got := make([]byte, len(message))
+	time.Sleep(31 * time.Second)
+	_, err := io.ReadFull(conn, got)
+
+	if err == nil {
+		t.Error("Expected connection to be closed by server timeout")
+	} else if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("Expected an EOF error, but got: %v", err)
 	}
 }
