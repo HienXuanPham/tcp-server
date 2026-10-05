@@ -118,16 +118,33 @@ func TestServerKeepsConnectionOpen(t *testing.T) {
 	}
 }
 
-func TestServerClosesInactiveConnection(t *testing.T) {
-	conn := setupTestConnection(t)
-	message := []byte("One Piece")
-	got := make([]byte, len(message))
-	time.Sleep(31 * time.Second)
-	_, err := io.ReadFull(conn, got)
+// source: https://stackoverflow.com/questions/30688685/how-does-one-test-net-conn-in-unit-tests-in-golang
+func TestHandleConnectionTimesOutOnInactiveConnection(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
 
-	if err == nil {
-		t.Error("Expected connection to be closed by server timeout")
-	} else if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
-		t.Fatalf("Expected an EOF error, but got: %v", err)
+	t.Cleanup(func() {
+		serverConn.Close()
+		clientConn.Close()
+	})
+
+	channelErr := make(chan error, 1)
+
+	go func() {
+		channelErr <- handleConn(serverConn, 50*time.Millisecond, time.Second)
+	}()
+
+	select {
+	case err := <-channelErr:
+		if err == nil {
+			t.Fatal("expected inactivity timeout")
+		}
+
+		var netErr net.Error
+		if !errors.As(err, &netErr) || !netErr.Timeout() {
+			t.Fatalf("expected timeout error, got: %v", err)
+		}
+
+	case <-time.After(time.Second):
+		t.Fatal("handleConn did not return after inactivity timeout")
 	}
 }
