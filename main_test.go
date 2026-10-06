@@ -148,3 +148,48 @@ func TestHandleConnectionTimesOutOnInactiveConnection(t *testing.T) {
 		t.Fatal("handleConn did not return after inactivity timeout")
 	}
 }
+
+func TestHandleConnectionResetsInactivityDeadlineAfterReceivingData(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+
+	t.Cleanup(func() {
+		serverConn.Close()
+		clientConn.Close()
+	})
+
+	if err := clientConn.SetDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("set client read deadline: %v", err)
+	}
+
+	go func() {
+		handleConn(serverConn, 100*time.Millisecond, time.Second)
+	}()
+
+	exchange := func(want []byte) {
+		t.Helper()
+
+		n, err := clientConn.Write(want)
+		if err != nil {
+			t.Fatalf("write failed: %v", err)
+		}
+		if n != len(want) {
+			t.Fatalf("wrote %d bytes, want %d bytes", n, len(want))
+		}
+
+		got := make([]byte, len(want))
+
+		if _, err := io.ReadFull(clientConn, got); err != nil {
+			t.Fatalf("read echo failed: %v", err)
+		}
+
+		if !bytes.Equal(got, want) {
+			t.Errorf("echoed data does not match sent data")
+		}
+	}
+
+	time.Sleep(60 * time.Millisecond)
+	exchange([]byte("first"))
+
+	time.Sleep(60 * time.Millisecond)
+	exchange([]byte("second"))
+}
