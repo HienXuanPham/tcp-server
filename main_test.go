@@ -193,3 +193,32 @@ func TestHandleConnectionResetsInactivityDeadlineAfterReceivingData(t *testing.T
 	time.Sleep(60 * time.Millisecond)
 	exchange([]byte("second"))
 }
+
+func TestHandleConnHandlesClientDisconnect(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+
+	t.Cleanup(func() {
+		serverConn.Close()
+		clientConn.Close()
+	})
+
+	done := make(chan error, 1)
+
+	go func() {
+		done <- handleConn(serverConn, 50*time.Millisecond, time.Second)
+	}()
+
+	if err := clientConn.Close(); err != nil {
+		t.Fatalf("close client connection: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
+			t.Fatalf("expected io.EOF after client disconnect, got: %v", err)
+		}
+
+	case <-time.After(time.Second):
+		t.Fatal("handleConn did not return after client disconnected")
+	}
+}
