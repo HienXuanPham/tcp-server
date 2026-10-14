@@ -214,8 +214,8 @@ func TestHandleConnHandlesClientDisconnect(t *testing.T) {
 
 	select {
 	case err := <-done:
-		if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
-			t.Fatalf("expected io.EOF after client disconnect, got: %v", err)
+		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
+			t.Fatalf("unexpected error after client disconnect: %v", err)
 		}
 
 	case <-time.After(time.Second):
